@@ -53,6 +53,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+def get_text_delta(event):
+    if getattr(event, "type", None) == "response.output_text.delta":
+        return getattr(event, "delta", "")
+
+    if isinstance(event, dict) and event.get("type") == "response.output_text.delta":
+        return event.get("delta", "")
+
+    return ""
+
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
@@ -77,17 +87,27 @@ if prompt:
         )
 
         try:
-            response = client.responses.create(
+            stream = client.responses.create(
                 model="gpt-5.5",
                 input=prompt,
+                stream=True,
             )
-            answer = response.output_text
+            answer = ""
+
+            for event in stream:
+                delta = get_text_delta(event)
+
+                if not delta:
+                    continue
+
+                answer += delta
+                response_placeholder.markdown(answer + "▌")
         except Exception as error:
             response_placeholder.empty()
             st.error("답변을 생성하는 중 오류가 발생했습니다.")
             st.exception(error)
             st.stop()
 
-        response_placeholder.write(answer)
+        response_placeholder.markdown(answer)
 
     st.session_state.messages.append({"role": "assistant", "content": answer})
